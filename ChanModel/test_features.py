@@ -21,6 +21,8 @@ from Chan import CChan
 from ChanModel.FeatureExtractor import CFeatureExtractor
 from ChanModel.LogicFeatures import calculate_signal_bar_quality, calculate_follow_through_strength
 from ChanModel.PriceLevelFeatures import identify_key_levels, extract_price_level_features
+from Common.CEnum import DATA_FIELD
+from Common.CTime import CTime
 
 
 class TestNewFeatures(unittest.TestCase):
@@ -59,14 +61,17 @@ class TestNewFeatures(unittest.TestCase):
             low_price = min(open_price, close_price) - abs(np.random.normal(0, 1))
             volume = 10000 + np.random.randint(-3000, 5000)
             
-            # 创建K线对象
-            klu = CKLine_Unit(idx=i, 
-                             date=f"2023-01-{(i%30)+1:02d}",
-                             open=open_price,
-                             high=high_price,
-                             low=low_price,
-                             close=close_price,
-                             volume=volume)
+            # 创建K线对象，CKLine_Unit 构造函数接受字典参数
+            kl_dict = {
+                DATA_FIELD.FIELD_TIME: CTime(2023, 1, (i % 30) + 1, 0, 0),
+                DATA_FIELD.FIELD_OPEN: open_price,
+                DATA_FIELD.FIELD_HIGH: high_price,
+                DATA_FIELD.FIELD_LOW: low_price,
+                DATA_FIELD.FIELD_CLOSE: close_price,
+                DATA_FIELD.FIELD_VOLUME: volume,
+            }
+            klu = CKLine_Unit(kl_dict)
+            klu.set_idx(i)
             klus.append(klu)
         
         return klus
@@ -84,11 +89,32 @@ class TestNewFeatures(unittest.TestCase):
         # 获取几个不同特征的K线进行测试
         test_cases = [
             # 大实体阳线（高质量信号柱）
-            CKLine_Unit(idx=0, date="2023-01-01", open=100, high=110, low=99, close=109, volume=12000),
+            CKLine_Unit({
+                DATA_FIELD.FIELD_TIME: CTime(2023, 1, 1, 0, 0),
+                DATA_FIELD.FIELD_OPEN: 100,
+                DATA_FIELD.FIELD_HIGH: 110,
+                DATA_FIELD.FIELD_LOW: 99,
+                DATA_FIELD.FIELD_CLOSE: 109,
+                DATA_FIELD.FIELD_VOLUME: 12000,
+            }),
             # 小实体带长上影线的阳线（低质量信号柱）
-            CKLine_Unit(idx=1, date="2023-01-02", open=100, high=110, low=99, close=101, volume=8000),
+            CKLine_Unit({
+                DATA_FIELD.FIELD_TIME: CTime(2023, 1, 2, 0, 0),
+                DATA_FIELD.FIELD_OPEN: 100,
+                DATA_FIELD.FIELD_HIGH: 110,
+                DATA_FIELD.FIELD_LOW: 99,
+                DATA_FIELD.FIELD_CLOSE: 101,
+                DATA_FIELD.FIELD_VOLUME: 8000,
+            }),
             # 十字星（最低质量信号柱）
-            CKLine_Unit(idx=2, date="2023-01-03", open=100, high=105, low=95, close=100, volume=5000)
+            CKLine_Unit({
+                DATA_FIELD.FIELD_TIME: CTime(2023, 1, 3, 0, 0),
+                DATA_FIELD.FIELD_OPEN: 100,
+                DATA_FIELD.FIELD_HIGH: 105,
+                DATA_FIELD.FIELD_LOW: 95,
+                DATA_FIELD.FIELD_CLOSE: 100,
+                DATA_FIELD.FIELD_VOLUME: 5000,
+            }),
         ]
         
         # 使用前10根K线作为历史数据
@@ -126,16 +152,64 @@ class TestNewFeatures(unittest.TestCase):
         # 创建信号柱和跟随柱组合进行测试
         test_cases = [
             # 1. 强信号柱 + 强跟随柱（同向）
-            (CKLine_Unit(idx=0, date="2023-01-01", open=100, high=109, low=99, close=108, volume=12000),
-             CKLine_Unit(idx=1, date="2023-01-02", open=107, high=115, low=106, close=114, volume=15000)),
-            
+            (
+                CKLine_Unit({
+                    DATA_FIELD.FIELD_TIME: CTime(2023, 1, 1, 0, 0),
+                    DATA_FIELD.FIELD_OPEN: 100,
+                    DATA_FIELD.FIELD_HIGH: 109,
+                    DATA_FIELD.FIELD_LOW: 99,
+                    DATA_FIELD.FIELD_CLOSE: 108,
+                    DATA_FIELD.FIELD_VOLUME: 12000,
+                }),
+                CKLine_Unit({
+                    DATA_FIELD.FIELD_TIME: CTime(2023, 1, 2, 0, 0),
+                    DATA_FIELD.FIELD_OPEN: 107,
+                    DATA_FIELD.FIELD_HIGH: 115,
+                    DATA_FIELD.FIELD_LOW: 106,
+                    DATA_FIELD.FIELD_CLOSE: 114,
+                    DATA_FIELD.FIELD_VOLUME: 15000,
+                })
+            ),
+
             # 2. 强信号柱 + 弱跟随柱（反向）
-            (CKLine_Unit(idx=2, date="2023-01-03", open=100, high=109, low=99, close=108, volume=12000),
-             CKLine_Unit(idx=3, date="2023-01-04", open=108, high=109, low=102, close=103, volume=8000)),
-            
+            (
+                CKLine_Unit({
+                    DATA_FIELD.FIELD_TIME: CTime(2023, 1, 3, 0, 0),
+                    DATA_FIELD.FIELD_OPEN: 100,
+                    DATA_FIELD.FIELD_HIGH: 109,
+                    DATA_FIELD.FIELD_LOW: 99,
+                    DATA_FIELD.FIELD_CLOSE: 108,
+                    DATA_FIELD.FIELD_VOLUME: 12000,
+                }),
+                CKLine_Unit({
+                    DATA_FIELD.FIELD_TIME: CTime(2023, 1, 4, 0, 0),
+                    DATA_FIELD.FIELD_OPEN: 108,
+                    DATA_FIELD.FIELD_HIGH: 109,
+                    DATA_FIELD.FIELD_LOW: 102,
+                    DATA_FIELD.FIELD_CLOSE: 103,
+                    DATA_FIELD.FIELD_VOLUME: 8000,
+                })
+            ),
+
             # 3. 弱信号柱 + 强跟随柱（突破）
-            (CKLine_Unit(idx=4, date="2023-01-05", open=105, high=110, low=104, close=106, volume=9000),
-             CKLine_Unit(idx=5, date="2023-01-06", open=107, high=115, low=106, close=113, volume=14000))
+            (
+                CKLine_Unit({
+                    DATA_FIELD.FIELD_TIME: CTime(2023, 1, 5, 0, 0),
+                    DATA_FIELD.FIELD_OPEN: 105,
+                    DATA_FIELD.FIELD_HIGH: 110,
+                    DATA_FIELD.FIELD_LOW: 104,
+                    DATA_FIELD.FIELD_CLOSE: 106,
+                    DATA_FIELD.FIELD_VOLUME: 9000,
+                }),
+                CKLine_Unit({
+                    DATA_FIELD.FIELD_TIME: CTime(2023, 1, 6, 0, 0),
+                    DATA_FIELD.FIELD_OPEN: 107,
+                    DATA_FIELD.FIELD_HIGH: 115,
+                    DATA_FIELD.FIELD_LOW: 106,
+                    DATA_FIELD.FIELD_CLOSE: 113,
+                    DATA_FIELD.FIELD_VOLUME: 14000,
+                })
+            ),
         ]
         
         # 使用前10根K线作为历史数据
